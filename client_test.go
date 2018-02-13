@@ -166,7 +166,7 @@ func Test_authentication(t *testing.T) {
 	}
 }
 
-func Test_handleStatusCode(t *testing.T) {
+func Test_handleStatusCode_error(t *testing.T) {
 	for _, tCase := range errorTestCases {
 
 		resp := http.Response{
@@ -182,6 +182,61 @@ func Test_handleStatusCode(t *testing.T) {
 		if reflect.TypeOf(err) != tCase.Error {
 			t.Fatalf("Expected error type %s but got %s", tCase.Error, reflect.TypeOf(err))
 		}
+	}
+}
+
+func Test_handleStatusCode_ok(t *testing.T) {
+
+	resp := http.Response{
+		StatusCode: 200,
+		Body:       ioutil.NopCloser(bytes.NewBufferString("")),
+	}
+
+	var err error
+	if err = handleStatusCode(&resp); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func Test_handleStatusCode_unknown(t *testing.T) {
+
+	resp := http.Response{
+		StatusCode: 501,
+		Body:       ioutil.NopCloser(bytes.NewBufferString("hello")),
+	}
+
+	var err error
+	if err = handleStatusCode(&resp); err == nil {
+		t.Fatalf("Expected error type %s but got nil", err)
+	}
+
+	if err.Error() != "Unknown status 501 with body hello" {
+		t.Fatal(err)
+	}
+}
+
+func Test_getClient_override(t *testing.T) {
+
+	var clientOverride HttpClient
+	clientOverride = &http.Client{}
+
+	SetHttpClient(clientOverride)
+
+	c := q.getClient()
+
+	if c != clientOverride {
+		t.Fatal("getClient() supposed to return client override")
+	}
+}
+
+func Test_getClient_default(t *testing.T) {
+
+	SetHttpClient(nil)
+
+	c := q.getClient()
+
+	if c == nil {
+		t.Fatal("getClient() supposed to return default client")
 	}
 }
 
@@ -205,9 +260,10 @@ func Test_SendReceive(t *testing.T) {
 	}
 
 	msgSend := Message{}
-	msgSend.Properties = map[string]string{}
-	msgSend.Properties["Prop1"] = "1"
-	msgSend.Properties["Prop2"] = "2"
+	msgSend.Properties = map[string]string{
+		"Prop1": "Value1",
+		"Prop2": "Value2",
+	}
 	msgSend.Body = []byte("Hello!")
 
 	err := cli.SendMessage(&msgSend)

@@ -16,14 +16,14 @@ import (
 	"sync"
 )
 
-type httpClient interface {
+type HttpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-var httpClientOverride httpClient = nil
+var httpClientOverride HttpClient = nil
 
 // Sets the package's http client.
-func SetHttpClient(client httpClient) {
+func SetHttpClient(client HttpClient) {
 	httpClientOverride = client
 }
 
@@ -72,7 +72,7 @@ type QueueClient struct {
 	Timeout int
 
 	mu         sync.Mutex
-	httpClient httpClient
+	httpClient HttpClient
 }
 
 // This operation atomically retrieves and locks a message from a queue or subscription for processing.
@@ -201,7 +201,7 @@ func (q *QueueClient) createRequestFromMessage(path string, method string, msg *
 	return req, nil
 }
 
-func (q *QueueClient) getClient() httpClient {
+func (q *QueueClient) getClient() HttpClient {
 
 	if httpClientOverride != nil {
 		return httpClientOverride
@@ -269,7 +269,7 @@ func handleStatusCode(resp *http.Response) error {
 		return InternalError{500, string(body)}
 	}
 
-	return fmt.Errorf("Unknown status %v with body %v", resp.StatusCode, body)
+	return fmt.Errorf("Unknown status %v with body %v", resp.StatusCode, string(body))
 }
 
 func parseMessage(resp *http.Response) (*Message, error) {

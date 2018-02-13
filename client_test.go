@@ -39,7 +39,7 @@ var testMsg = Message{
 	Properties: map[string]string{"Prop1": "Value1"},
 }
 
-var brokerProps = fmt.Sprint("{ \"SessionId\": \"%s\", \"MessageId\": \"%s\", \"TimeToLive\" : %v, \"CorrelationId\": \"%s\", \"SequenceNumber\" : %v, \"DeliveryCount\" : %v, \"To\" : \"%s\", \"ReplyTo\" : \"%s\",  \"EnqueuedTimeUtc\" : \"%s\", \"ScheduledEnqueueTimeUtc\" : \"%s\"}",
+var brokerProps = fmt.Sprintf("{ \"SessionId\": \"%s\", \"MessageId\": \"%s\", \"TimeToLive\" : %v, \"CorrelationId\": \"%s\", \"SequenceNumber\" : %v, \"DeliveryCount\" : %v, \"To\" : \"%s\", \"ReplyTo\" : \"%s\",  \"EnqueuedTimeUtc\" : \"%s\", \"ScheduledEnqueueTimeUtc\" : \"%s\"}",
 	testMsg.SessionId,
 	testMsg.Id,
 	testMsg.TimeToLive,
@@ -67,7 +67,6 @@ var errorTestCases = []errorCase{
 }
 
 func TestMain(m *testing.M) {
-
 	SetDebugLogger(nil)
 
 	retCode := m.Run()

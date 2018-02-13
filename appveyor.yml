@@ -1,0 +1,25 @@
+version: 1.0.{build}
+
+init:
+  - git config --global core.autocrlf input
+
+clone_folder: c:\gopath\src\github.com\g-rad\go-azurequeue
+
+environment:
+  GOPATH: c:\gopath
+
+install:
+  - set GOROOT=c:\go
+  - set PATH=%GOPATH%\bin;%GOROOT%\bin;%PATH%
+  - go version
+  - go env
+
+build_script:
+  - go build
+
+before_test:
+  - pip install codecov
+
+test_script:
+  - go test -race -coverprofile=coverage.txt -covermode=atomic
+  - codecov -f coverage.txt

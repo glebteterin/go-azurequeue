@@ -138,6 +138,30 @@ func Test_parseMessage(t *testing.T) {
 	compareMsg(t, &testMsg, msg, false)
 }
 
+func Test_parseHeaders(t *testing.T) {
+
+	expectedProps := map[string]string{
+		"Prop1": "Value1",
+		"Prop2": "Value2",
+	}
+
+	resp := &http.Response{
+		Header: map[string][]string {
+			"Prop1": []string{"\"Value1\""},
+			"Prop2": []string{"Value2"},
+		},
+		Body:       ioutil.NopCloser(bytes.NewBufferString("hello")),
+	}
+
+	msg := &Message{
+		Properties: map[string]string{},
+	}
+
+	parseHeaders(msg, resp)
+
+	compareProperties(t, expectedProps, msg.Properties)
+}
+
 func Test_parseBrokerProperties(t *testing.T) {
 
 	msg := &Message{}
@@ -246,7 +270,7 @@ func Test_SendReceive(t *testing.T) {
 
 	namespace := ""
 	keyName := ""
-	keyValue := "="
+	keyValue := ""
 	queueName := ""
 
 	cli := QueueClient{
@@ -338,10 +362,14 @@ func compareMsg(t *testing.T, expected *Message, actual *Message, skipProperties
 	}
 
 	if !skipProperties {
-		for k := range expected.Properties {
-			if actual.Properties[k] != expected.Properties[k] {
-				t.Fatalf("Expected property[%s] is %s but got %s", testMsg.Properties[k], actual.Properties[k])
-			}
+		compareProperties(t, expected.Properties, actual.Properties)
+	}
+}
+
+func compareProperties(t *testing.T, expected map[string]string, actual map[string]string) {
+	for k := range expected {
+		if actual[k] != expected[k] {
+			t.Fatalf("Expected property[%s] is %s but got %s", expected[k], actual[k])
 		}
 	}
 }

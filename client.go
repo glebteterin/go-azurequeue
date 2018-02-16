@@ -272,6 +272,8 @@ func handleStatusCode(resp *http.Response) error {
 	return fmt.Errorf("Unknown status %v with body %v", resp.StatusCode, string(body))
 }
 
+const brokerPropertiesHeader = "BrokerProperties"
+
 func parseMessage(resp *http.Response) (*Message, error) {
 
 	logger.Debug("Response StatusCode ", resp.StatusCode)
@@ -282,13 +284,9 @@ func parseMessage(resp *http.Response) (*Message, error) {
 	m := Message{}
 	m.Properties = map[string]string{}
 
-	for k, v := range resp.Header {
-		if k != "BrokerProperties" {
-			m.Properties[k] = v[0]
-		}
-	}
+	parseHeaders(&m, resp)
 
-	brokerProperties := resp.Header.Get("BrokerProperties")
+	brokerProperties := resp.Header.Get(brokerPropertiesHeader)
 
 	if len(brokerProperties) > 0 {
 		parseBrokerProperties(&m, brokerProperties)
@@ -303,6 +301,15 @@ func parseMessage(resp *http.Response) (*Message, error) {
 	m.Body = value
 
 	return &m, nil
+}
+
+func parseHeaders(m *Message, resp *http.Response) {
+	for k, v := range resp.Header {
+		if k != brokerPropertiesHeader {
+			// azure returns customer headers quoted
+			m.Properties[k] = strings.Trim(v[0], "\"")
+		}
+	}
 }
 
 func parseBrokerProperties(m *Message, properties string) {

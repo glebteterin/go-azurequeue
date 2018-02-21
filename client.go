@@ -18,6 +18,12 @@ import (
 
 const Rfc2616Time = "Mon, 02 Jan 2006 15:04:05 MST"
 
+const (
+	headerBrokerProperties = "BrokerProperties"
+	headerContentType = "Content-Type"
+	headerDate = "Date"
+)
+
 type HttpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -206,7 +212,7 @@ func (q *QueueClient) createRequestFromMessage(path string, method string, msg *
 	if err != nil {
 		return nil, err
 	}
-	req.Header[brokerPropertiesHeader] = []string{bs}
+	req.Header[headerBrokerProperties] = []string{bs}
 
 	// set Content-Type header
 	if msg.ContentType != "" {
@@ -289,10 +295,6 @@ func handleStatusCode(resp *http.Response) error {
 	return fmt.Errorf("Unknown status %v with body %v", resp.StatusCode, string(body))
 }
 
-const brokerPropertiesHeader = "BrokerProperties"
-const contentTypeHeader = "Content-Type"
-const dateHeader = "Date"
-
 func parseMessage(resp *http.Response) (*Message, error) {
 
 	logger.Debug("Response StatusCode ", resp.StatusCode)
@@ -305,7 +307,7 @@ func parseMessage(resp *http.Response) (*Message, error) {
 
 	parseHeaders(&m, resp)
 
-	brokerProperties := resp.Header.Get(brokerPropertiesHeader)
+	brokerProperties := resp.Header.Get(headerBrokerProperties)
 
 	if len(brokerProperties) > 0 {
 		parseBrokerProperties(&m, brokerProperties)
@@ -326,14 +328,14 @@ func parseHeaders(m *Message, resp *http.Response) {
 	for k, v := range resp.Header {
 
 		switch k {
-			case brokerPropertiesHeader: {
+			case headerBrokerProperties: {
 				continue
 			}
-			case contentTypeHeader: {
+			case headerContentType: {
 				m.ContentType = v[0]
 				continue
 			}
-			case dateHeader: {
+			case headerDate: {
 				if t, err := time.Parse(Rfc2616Time, v[0]); err == nil {
 					m.EnqueuedTimeUtc = t
 				}

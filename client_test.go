@@ -1,16 +1,16 @@
 package queue
 
 import (
+	"bytes"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"reflect"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
-	"net/http"
-	"io/ioutil"
-	"bytes"
-	"reflect"
-	"sync"
-	"strconv"
-	"os"
-	"fmt"
 )
 
 var q = QueueClient{
@@ -125,6 +125,7 @@ func Test_parseMessage(t *testing.T) {
 		Header: http.Header{
 			"Brokerproperties": []string{brokerProps},
 			"Prop1":            []string{"Value1"},
+			"Date":             []string{testMsg.EnqueuedTimeUtc.Format(Rfc2616Time)},
 		},
 		Body: ioutil.NopCloser(bytes.NewBufferString("Hello World")),
 	}
@@ -146,11 +147,11 @@ func Test_parseHeaders(t *testing.T) {
 	}
 
 	resp := &http.Response{
-		Header: map[string][]string {
+		Header: map[string][]string{
 			"Prop1": []string{"\"Value1\""},
 			"Prop2": []string{"Value2"},
 		},
-		Body:       ioutil.NopCloser(bytes.NewBufferString("hello")),
+		Body: ioutil.NopCloser(bytes.NewBufferString("hello")),
 	}
 
 	msg := &Message{
@@ -167,6 +168,7 @@ func Test_parseBrokerProperties(t *testing.T) {
 	msg := &Message{}
 
 	parseBrokerProperties(msg, brokerProps)
+	msg.EnqueuedTimeUtc = testMsg.EnqueuedTimeUtc
 
 	compareMsg(t, &testMsg, msg, true)
 }
@@ -264,6 +266,33 @@ func Test_getClient_default(t *testing.T) {
 	}
 }
 
+func Test_brokerProperties_Marshal(t *testing.T) {
+
+	p := brokerProperties{}
+	p.MessageId = "1"
+	p.Label = "2"
+	p.CorrelationId = "3"
+	p.SessionId = "4"
+	p.TimeToLive = 5
+	p.To = "6"
+	p.ReplyTo = "7"
+	p.ScheduledEnqueueTimeUtc = "Thu, 22 Feb 2018 10:03:56 NZDT"
+	p.ReplyToSessionId = "9"
+	p.PartitionKey = "10"
+
+	expected := `{"MessageId":"1","Label":"2","CorrelationId":"3","SessionId":"4","TimeToLive":5,"To":"6","ReplyTo":"7","ScheduledEnqueueTimeUtc":"Thu, 22 Feb 2018 10:03:56 NZDT","ReplyToSessionId":"9","PartitionKey":"10"}`
+
+	json, err := p.Marshal()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if json != expected {
+		t.Fatalf("Expected json %s but got %s", expected, json)
+	}
+}
+
 func Test_SendReceive(t *testing.T) {
 
 	t.Skip("Real parameters required")
@@ -289,6 +318,8 @@ func Test_SendReceive(t *testing.T) {
 		"Prop2": "Value2",
 	}
 	msgSend.Body = []byte("Hello!")
+	msgSend.ContentType = "CustomContentType"
+	msgSend.SessionId = "SessionA"
 
 	err := cli.SendMessage(&msgSend)
 
@@ -308,8 +339,16 @@ func Test_SendReceive(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if string(msgReceive.ContentType) != string(msgSend.ContentType) {
+		t.Fatalf("Expected Content-Type %s but got %s", string(msgSend.Body), string(msgReceive.Body))
+	}
+
 	if string(msgReceive.Body) != string(msgSend.Body) {
 		t.Fatalf("Expected body %s but got %s", string(msgSend.Body), string(msgReceive.Body))
+	}
+
+	if string(msgReceive.SessionId) != string(msgSend.SessionId) {
+		t.Fatalf("Expected SessionId %s but got %s", string(msgSend.SessionId), string(msgReceive.SessionId))
 	}
 
 	for k, _ := range msgSend.Properties {

@@ -1,20 +1,22 @@
 package queue
 
 import (
-	"net/http"
-	"fmt"
-	"time"
 	"bytes"
-	"strconv"
-	"strings"
-	"net/url"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
+
+const Rfc2616Time = "Mon, 02 Jan 2006 15:04:05 MST"
 
 type HttpClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -194,8 +196,23 @@ func (q *QueueClient) createRequestFromMessage(path string, method string, msg *
 	}
 
 	for k, v := range msg.Properties {
-		req.Header.Add(k, v)
+		req.Header[k] = []string{v}
 	}
+
+	// set BrokeredProperties header
+	b := brokerProperties{}
+	b.CopyFromMessage(msg)
+	bs, err := b.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	req.Header[brokerPropertiesHeader] = []string{bs}
+
+	// set Content-Type header
+	if msg.ContentType != "" {
+		req.Header.Set("Content-Type", msg.ContentType)
+	}
+
 
 	req.Header.Set("Authorization", q.makeAuthHeader(url, time.Now()))
 	return req, nil
@@ -273,6 +290,8 @@ func handleStatusCode(resp *http.Response) error {
 }
 
 const brokerPropertiesHeader = "BrokerProperties"
+const contentTypeHeader = "Content-Type"
+const dateHeader = "Date"
 
 func parseMessage(resp *http.Response) (*Message, error) {
 
@@ -305,9 +324,25 @@ func parseMessage(resp *http.Response) (*Message, error) {
 
 func parseHeaders(m *Message, resp *http.Response) {
 	for k, v := range resp.Header {
-		if k != brokerPropertiesHeader {
-			// azure returns customer headers quoted
-			m.Properties[k] = strings.Trim(v[0], "\"")
+
+		switch k {
+			case brokerPropertiesHeader: {
+				continue
+			}
+			case contentTypeHeader: {
+				m.ContentType = v[0]
+				continue
+			}
+			case dateHeader: {
+				if t, err := time.Parse(Rfc2616Time, v[0]); err == nil {
+					m.EnqueuedTimeUtc = t
+				}
+				continue
+			}
+			default: {
+				// azure returns customer headers quoted
+				m.Properties[k] = strings.Trim(v[0], "\"")
+			}
 		}
 	}
 }
@@ -328,7 +363,6 @@ func parseBrokerProperties(m *Message, properties string) {
 	m.Label = p.Label
 	m.ReplyTo = p.ReplyTo
 	m.To = p.To
-	m.ContentType = p.ContentType
 	m.CorrelationId = p.CorrelationId
 	m.ReplyToSessionId = p.ReplyToSessionId
 	m.PartitionKey = p.PartitionKey
@@ -343,32 +377,78 @@ func parseBrokerProperties(m *Message, properties string) {
 		m.LockedUntilUtc = t
 	}
 
-	if t, err := time.Parse(Rfc2616Time, p.EnqueuedTimeUtc); err == nil {
-		m.EnqueuedTimeUtc = t
-	}
-
 	if t, err := time.Parse(Rfc2616Time, p.ScheduledEnqueueTimeUtc); err == nil {
 		m.ScheduledEnqueueTimeUtc = t
 	}
-
 }
 
 // See https://docs.microsoft.com/en-us/rest/api/servicebus/message-headers-and-properties
 type brokerProperties struct {
-	MessageId               string `json:"MessageId"`
-	LockToken               string `json:"LockToken"`
-	Label                   string `json:"Label"`
-	ContentType             string `json:"ContentType"`
-	CorrelationId           string `json:"CorrelationId"`
-	SessionId               string `json:"SessionId"`
-	DeliveryCount           int    `json:"DeliveryCount"`
-	LockedUntilUtc          string `json:"LockedUntilUtc"`
-	ReplyTo                 string `json:"ReplyTo"`
-	EnqueuedTimeUtc         string `json:"EnqueuedTimeUtc"`
-	SequenceNumber          int64  `json:"SequenceNumber"`
-	TimeToLive              int    `json:"TimeToLive"`
-	To                      string `json:"To"`
-	ScheduledEnqueueTimeUtc string `json:"ScheduledEnqueueTimeUtc"`
-	ReplyToSessionId        string `json:"ReplyToSessionId"`
-	PartitionKey            string `json:"PartitionKey"`
+	// Req, Res
+	MessageId               string `json:"MessageId,omitempty"`
+
+	// Req, Res
+	Label                   string `json:"Label,omitempty"`
+
+	// Req, Res
+	CorrelationId           string `json:"CorrelationId,omitempty"`
+
+	// Req, Res
+	SessionId               string `json:"SessionId,omitempty"`
+
+	// Req, Res
+	TimeToLive              int    `json:"TimeToLive,omitempty"`
+
+	// Req, Res
+	To                      string `json:"To,omitempty"`
+
+	// Req, Res
+	ReplyTo                 string `json:"ReplyTo,omitempty"`
+
+	// Req, Res
+	ScheduledEnqueueTimeUtc string `json:"ScheduledEnqueueTimeUtc,omitempty"`
+
+	// Req, Res
+	ReplyToSessionId        string `json:"ReplyToSessionId,omitempty"`
+
+	// Req, Res
+	PartitionKey            string `json:"PartitionKey,omitempty"`
+
+	// Res
+	DeliveryCount           int    `json:"DeliveryCount,omitempty"`
+
+	// Res
+	LockToken               string `json:"LockToken,omitempty"`
+
+	// Res
+	LockedUntilUtc          string `json:"LockedUntilUtc,omitempty"`
+
+	// Res
+	SequenceNumber          int64  `json:"SequenceNumber,omitempty"`
+}
+
+func (p *brokerProperties) CopyFromMessage(msg *Message) {
+	p.MessageId = msg.Id
+	p.Label = msg.Label
+	p.CorrelationId = msg.CorrelationId
+	p.SessionId = msg.SessionId
+	p.TimeToLive = msg.TimeToLive
+	p.To = msg.To
+	p.ReplyTo = msg.ReplyTo
+	p.ReplyToSessionId = msg.ReplyToSessionId
+	p.PartitionKey = msg.PartitionKey
+
+	defaultTime := time.Time{}
+	if msg.ScheduledEnqueueTimeUtc != defaultTime {
+		p.ScheduledEnqueueTimeUtc = msg.ScheduledEnqueueTimeUtc.Format(Rfc2616Time)
+	}
+}
+
+func (p *brokerProperties) Marshal() (string, error) {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
 }

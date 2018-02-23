@@ -36,7 +36,7 @@ var testMsg = Message{
 	EnqueuedTimeUtc:         time.Date(1994, 11, 6, 8, 49, 37, 0, loc),
 	ScheduledEnqueueTimeUtc: time.Date(1994, 11, 6, 8, 49, 37, 0, loc),
 
-	Properties: map[string]string{"Prop1": "Value1"},
+	Properties: Properties{"Prop1": "Value1"},
 }
 
 var brokerProps = fmt.Sprintf("{ \"SessionId\": \"%s\", \"MessageId\": \"%s\", \"TimeToLive\" : %v, \"CorrelationId\": \"%s\", \"SequenceNumber\" : %v, \"DeliveryCount\" : %v, \"To\" : \"%s\", \"ReplyTo\" : \"%s\",  \"EnqueuedTimeUtc\" : \"%s\", \"ScheduledEnqueueTimeUtc\" : \"%s\"}",
@@ -141,7 +141,7 @@ func Test_parseMessage(t *testing.T) {
 
 func Test_parseHeaders(t *testing.T) {
 
-	expectedProps := map[string]string{
+	expectedProps := Properties{
 		"Prop1": "Value1",
 		"Prop2": "Value2",
 	}
@@ -155,7 +155,7 @@ func Test_parseHeaders(t *testing.T) {
 	}
 
 	msg := &Message{
-		Properties: map[string]string{},
+		Properties: Properties{},
 	}
 
 	parseHeaders(msg, resp)
@@ -266,6 +266,30 @@ func Test_getClient_default(t *testing.T) {
 	}
 }
 
+func Test_Properties(t *testing.T) {
+
+	tests := []struct {
+		keySet string
+		keyGet string
+		value string
+	}{
+		{"Key", "Key", "Value"},
+		{"KeY", "keY", "Value"},
+		{"Key-1", "Key-1", "Value"},
+		{"kEy-kEy", "key-key", "Value"},
+	}
+
+	p := Properties{}
+
+	for _,test := range tests {
+		p.Set(test.keySet, test.value)
+
+		if p.Get(test.keyGet) != test.value {
+			t.Fatalf("Expected value %s but got %s", test.value, p.Get(test.keyGet))
+		}
+	}
+}
+
 func Test_brokerProperties_Marshal(t *testing.T) {
 
 	p := brokerProperties{}
@@ -313,7 +337,7 @@ func Test_SendReceive(t *testing.T) {
 	}
 
 	msgSend := Message{}
-	msgSend.Properties = map[string]string{
+	msgSend.Properties = Properties{
 		"Prop1": "Value1",
 		"Prop2": "Value2",
 	}
@@ -352,8 +376,8 @@ func Test_SendReceive(t *testing.T) {
 	}
 
 	for k, _ := range msgSend.Properties {
-		if msgReceive.Properties[k] != msgSend.Properties[k] {
-			t.Fatalf("Expected property %s value %s but got %s", k, msgSend.Properties[k], msgReceive.Properties[k])
+		if msgReceive.Properties.Get(k) != msgSend.Properties.Get(k) {
+			t.Fatalf("Expected property %s value %s but got %s", k, msgSend.Properties.Get(k), msgReceive.Properties.Get(k))
 		}
 	}
 }
@@ -405,10 +429,10 @@ func compareMsg(t *testing.T, expected *Message, actual *Message, skipProperties
 	}
 }
 
-func compareProperties(t *testing.T, expected map[string]string, actual map[string]string) {
+func compareProperties(t *testing.T, expected Properties, actual Properties) {
 	for k := range expected {
-		if actual[k] != expected[k] {
-			t.Fatalf("Expected property[%s] is %s but got %s", expected[k], actual[k])
+		if actual.Get(k) != expected.Get(k) {
+			t.Fatalf("Expected property[%s] is %s but got %s", expected.Get(k), actual.Get(k))
 		}
 	}
 }

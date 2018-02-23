@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -20,8 +21,8 @@ const Rfc2616Time = "Mon, 02 Jan 2006 15:04:05 MST"
 
 const (
 	headerBrokerProperties = "BrokerProperties"
-	headerContentType = "Content-Type"
-	headerDate = "Date"
+	headerContentType      = "Content-Type"
+	headerDate             = "Date"
 )
 
 type HttpClient interface {
@@ -33,6 +34,27 @@ var httpClientOverride HttpClient = nil
 // Sets the package's http client.
 func SetHttpClient(client HttpClient) {
 	httpClientOverride = client
+}
+
+// Properties represents the key-value pairs of message properties.
+type Properties map[string]string
+
+// Get gets the first value associated with the given key.
+// It is case insensitive; textproto.CanonicalMIMEHeaderKey is used
+// to canonicalize the provided key.
+// If there are no values associated with the key, Get returns "".
+func (p Properties) Get(key string) string {
+	if p == nil {
+		return ""
+	}
+	return p[textproto.CanonicalMIMEHeaderKey(key)]
+}
+
+// Set sets the header entries associated with key to
+// the single element value. It replaces any existing
+// values associated with key.
+func (p Properties) Set(key, value string) {
+	p[textproto.CanonicalMIMEHeaderKey(key)] = value
 }
 
 // Queue Message.
@@ -56,14 +78,21 @@ type Message struct {
 	ReplyToSessionId        string
 	PartitionKey            string
 
-	Properties map[string]string
+	Properties Properties
 
 	Body []byte
 }
 
+func NewMessage(body []byte) *Message {
+
+	return &Message {
+		Body: body,
+		Properties: Properties{},
+	}
+}
+
 // Thread-safe client for Azure Service Bus Queue.
 type QueueClient struct {
-
 	// Service Bus Namespace e.g. https://<yournamespace>.servicebus.windows.net
 	Namespace string
 
@@ -202,7 +231,7 @@ func (q *QueueClient) createRequestFromMessage(path string, method string, msg *
 	}
 
 	for k, v := range msg.Properties {
-		req.Header[k] = []string{v}
+		req.Header.Set(k, v)
 	}
 
 	// set BrokeredProperties header
@@ -212,13 +241,12 @@ func (q *QueueClient) createRequestFromMessage(path string, method string, msg *
 	if err != nil {
 		return nil, err
 	}
-	req.Header[headerBrokerProperties] = []string{bs}
+	req.Header.Set(headerBrokerProperties, bs)
 
 	// set Content-Type header
 	if msg.ContentType != "" {
 		req.Header.Set("Content-Type", msg.ContentType)
 	}
-
 
 	req.Header.Set("Authorization", q.makeAuthHeader(url, time.Now()))
 	return req, nil
@@ -302,8 +330,9 @@ func parseMessage(resp *http.Response) (*Message, error) {
 	logger.Debug("Response Header ", resp.Header)
 	logger.Debug("Response ContentLength ", resp.ContentLength)
 
-	m := Message{}
-	m.Properties = map[string]string{}
+	m := Message{
+		Properties: Properties{},
+	}
 
 	parseHeaders(&m, resp)
 
@@ -328,22 +357,26 @@ func parseHeaders(m *Message, resp *http.Response) {
 	for k, v := range resp.Header {
 
 		switch k {
-			case headerBrokerProperties: {
+		case headerBrokerProperties:
+			{
 				continue
 			}
-			case headerContentType: {
+		case headerContentType:
+			{
 				m.ContentType = v[0]
 				continue
 			}
-			case headerDate: {
+		case headerDate:
+			{
 				if t, err := time.Parse(Rfc2616Time, v[0]); err == nil {
 					m.EnqueuedTimeUtc = t
 				}
 				continue
 			}
-			default: {
+		default:
+			{
 				// azure returns customer headers quoted
-				m.Properties[k] = strings.Trim(v[0], "\"")
+				m.Properties.Set(k, strings.Trim(v[0], "\""))
 			}
 		}
 	}
@@ -387,46 +420,46 @@ func parseBrokerProperties(m *Message, properties string) {
 // See https://docs.microsoft.com/en-us/rest/api/servicebus/message-headers-and-properties
 type brokerProperties struct {
 	// Req, Res
-	MessageId               string `json:"MessageId,omitempty"`
+	MessageId string `json:"MessageId,omitempty"`
 
 	// Req, Res
-	Label                   string `json:"Label,omitempty"`
+	Label string `json:"Label,omitempty"`
 
 	// Req, Res
-	CorrelationId           string `json:"CorrelationId,omitempty"`
+	CorrelationId string `json:"CorrelationId,omitempty"`
 
 	// Req, Res
-	SessionId               string `json:"SessionId,omitempty"`
+	SessionId string `json:"SessionId,omitempty"`
 
 	// Req, Res
-	TimeToLive              int    `json:"TimeToLive,omitempty"`
+	TimeToLive int `json:"TimeToLive,omitempty"`
 
 	// Req, Res
-	To                      string `json:"To,omitempty"`
+	To string `json:"To,omitempty"`
 
 	// Req, Res
-	ReplyTo                 string `json:"ReplyTo,omitempty"`
+	ReplyTo string `json:"ReplyTo,omitempty"`
 
 	// Req, Res
 	ScheduledEnqueueTimeUtc string `json:"ScheduledEnqueueTimeUtc,omitempty"`
 
 	// Req, Res
-	ReplyToSessionId        string `json:"ReplyToSessionId,omitempty"`
+	ReplyToSessionId string `json:"ReplyToSessionId,omitempty"`
 
 	// Req, Res
-	PartitionKey            string `json:"PartitionKey,omitempty"`
+	PartitionKey string `json:"PartitionKey,omitempty"`
 
 	// Res
-	DeliveryCount           int    `json:"DeliveryCount,omitempty"`
+	DeliveryCount int `json:"DeliveryCount,omitempty"`
 
 	// Res
-	LockToken               string `json:"LockToken,omitempty"`
+	LockToken string `json:"LockToken,omitempty"`
 
 	// Res
-	LockedUntilUtc          string `json:"LockedUntilUtc,omitempty"`
+	LockedUntilUtc string `json:"LockedUntilUtc,omitempty"`
 
 	// Res
-	SequenceNumber          int64  `json:"SequenceNumber,omitempty"`
+	SequenceNumber int64 `json:"SequenceNumber,omitempty"`
 }
 
 func (p *brokerProperties) CopyFromMessage(msg *Message) {

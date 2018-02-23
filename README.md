@@ -26,7 +26,10 @@ If you need to install Go, follow [the official instructions](https://golang.org
 ##### Init Client
 
 ```go
-cli := QueueClient{
+
+import "github.com/g-rad/go-azurequeue"
+
+cli := queue.QueueClient{
   Namespace:  "my-test",
   KeyName:    "RootManageSharedAccessKey",
   KeyValue:   "ErCWbtgArb55Tqqu9tXgdCtopbZ44pMH01sjpMrYGrE=",
@@ -39,12 +42,10 @@ cli := QueueClient{
 
 ```go
 // create message
-msg := Message{}
-msg.Properties = map[string]string {
-  "Property1": "Value1",
-  "Property2": "Value2",
-}
-msg.Body = []byte("Hello!")
+msg := queue.NewMessage(]byte("Hello!"))
+
+msg.Properties.Set("Property1", "Value1")
+msg.Properties.Set("Property2", "Value2")
 
 // send message
 cli.SendMessage(&msg)

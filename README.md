@@ -27,7 +27,7 @@ If you need to install Go, follow [the official instructions](https://golang.org
 
 ```go
 
-import "github.com/g-rad/go-azurequeue"
+import queue "github.com/g-rad/go-azurequeue"
 
 cli := queue.QueueClient{
   Namespace:  "my-test",

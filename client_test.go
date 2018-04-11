@@ -432,7 +432,7 @@ func compareMsg(t *testing.T, expected *Message, actual *Message, skipProperties
 func compareProperties(t *testing.T, expected Properties, actual Properties) {
 	for k := range expected {
 		if actual.Get(k) != expected.Get(k) {
-			t.Fatalf("Expected property[%s] is %s but got %s", expected.Get(k), actual.Get(k))
+			t.Fatalf("Expected property[%s] is %s but got %s", k, expected.Get(k), actual.Get(k))
 		}
 	}
 }
